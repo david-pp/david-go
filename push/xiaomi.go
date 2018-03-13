@@ -2,89 +2,111 @@ package main
 
 import (
 	"fmt"
-	"strings"
 	"io/ioutil"
 	"net/http"
 	"net/url"
-	// "log"
+	"strings"
+	"github.com/rs/zerolog/log"
 )
 
-var xiaomi_notify_id = 0
+var xiaomiNotifyId = 0
 
-func push_to_xiaomi(device *DeviceInfo, message *PushMessage) {
-	fmt.Printf("%s %d %d\n", device.CID, device.Platform, device.PushType)	
+func pushMessageToXiaoMi(device *DeviceInfo, message *PushMessage) {
+	xiaomiNotifyId += 1
 
-	xiaomi_notify_id += 1
+	log.Debug().
+		Str("CID", device.CID).
+		Uint32("Platform", device.Platform).
+		Uint32("PushType", device.PushType).
+		Msgf("pushMessageToXiaoMi")
 
 	var key string
 	var postValue url.Values
+	var xiaomi_url = "https://api.xmpush.xiaomi.com/v3/message/regid"
 
 	switch device.Platform {
-		case Platform_Andriod: {
+	case Platform_Andriod:
+		{
 			key = "key=nwSa9gFZB3MIWsqrRrsu9w=="
 
-			postValue = url.Values {
-				"title" : { message.Title },
-				"description" : { message.Content },
-				"registration_id" : { device.CID },
-				"restricted_package_name" : {"com.ztgame.ztas"},
-				"notify_type" : {"2"},
-				"time_to_live" : {"3600000"}, 
-				"notify_id" : { fmt.Sprintf("%d",xiaomi_notify_id) },
+			postValue = url.Values{
+				"title":                   {message.Title},
+				"description":             {message.Content},
+				"registration_id":         {device.CID},
+				"restricted_package_name": {"com.ztgame.ztas"},
+				"notify_type":             {"2"},
+				"time_to_live":            {"3600000"},
+				"notify_id":               {fmt.Sprintf("%d", xiaomiNotifyId)},
 			}
 		}
-		case Platform_iOS_Enterprise: {
+	case Platform_iOS_Enterprise:
+		{
 			key = "key=pWR57EFBrRFgJHmg+oKQ5w=="
 
-			postValue = url.Values {
-				"aps_proper_fields.title" : { message.Title },
-				"aps_proper_fields.body" : { message.Content },
-				"registration_id" : { device.CID },
-				"restricted_package_name" : {"com.ztgame.ztas"},
-				"notify_type" : {"2"},
-				"time_to_live" : {"3600000"}, 
-				"notify_id" : { fmt.Sprintf("%d",xiaomi_notify_id) },
-			}	
+			postValue = url.Values{
+				"aps_proper_fields.title": {message.Title},
+				"aps_proper_fields.body":  {message.Content},
+				"registration_id":         {device.CID},
+				"restricted_package_name": {"com.ztgame.ztas"},
+				"notify_type":             {"2"},
+				"time_to_live":            {"3600000"},
+				"notify_id":               {fmt.Sprintf("%d", xiaomiNotifyId)},
+			}
 		}
-		case Platform_iOS_AppStore: {
+	case Platform_iOS_AppStore:
+		{
 			key = "key=2nYdULuilijYKQdHykf1Vg=="
 
-			postValue = url.Values {
-				"aps_proper_fields.title" : { message.Title },
-				"aps_proper_fields.body" : { message.Content },
-				"registration_id" : { device.CID },
-				"restricted_package_name" : {"com.ztgame.ztas"},
-				"notify_type" : {"2"},
-				"time_to_live" : {"3600000"}, 
-				"notify_id" : { fmt.Sprintf("%d",xiaomi_notify_id) },
-			}	
+			postValue = url.Values{
+				"aps_proper_fields.title": {message.Title},
+				"aps_proper_fields.body":  {message.Content},
+				"registration_id":         {device.CID},
+				"restricted_package_name": {"com.ztgame.ztas"},
+				"notify_type":             {"2"},
+				"time_to_live":            {"3600000"},
+				"notify_id":               {fmt.Sprintf("%d", xiaomiNotifyId)},
+			}
 		}
-		default:
-			return
-	}
-	
-	req, err := http.NewRequest("POST", "https://api.xmpush.xiaomi.com/v3/message/regid",
-		strings.NewReader(postValue.Encode()))
-	if err != nil {
-		fmt.Println("Error:", err)
+	case Platform_iOS_Sandbox:
+		{
+			key = "key=2nYdULuilijYKQdHykf1Vg=="
+
+			postValue = url.Values{
+				"aps_proper_fields.title": {message.Title},
+				"aps_proper_fields.body":  {message.Content},
+				"registration_id":         {device.CID},
+				"restricted_package_name": {"com.ztgame.ztas"},
+				"notify_type":             {"2"},
+				"time_to_live":            {"3600000"},
+				"notify_id":               {fmt.Sprintf("%d", xiaomiNotifyId)},
+			}
+
+			xiaomi_url = "https://sandbox.xmpush.xiaomi.com/v3/message/regid"
+		}
+	default:
 		return
 	}
 
-	req.Header.Set("Content-Type",  "application/x-www-form-urlencoded")
+	req, err := http.NewRequest("POST", xiaomi_url, strings.NewReader(postValue.Encode()))
+	if err != nil {
+		log.Error().Err(err).Msgf("postToXiaoMi")
+		return
+	}
+
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.Header.Set("Authorization", key)
 
 	client := &http.Client{}
 
- 	resp, err := client.Do(req)
+	resp, err := client.Do(req)
 
 	defer resp.Body.Close()
-	
+
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		fmt.Println("Error:", err)
+		log.Error().Err(err).Msgf("PostToXiaoMi")
 		return
 	}
 
-	fmt.Println(postValue)
-	fmt.Println(string(body))
+	log.Info().Str("result:", string(body)).Msgf("postToXiaoMi")
 }

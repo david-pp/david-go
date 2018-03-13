@@ -1,18 +1,16 @@
 package main
 
 import (
-	"fmt"
 	"flag"
-	// "os"
-	// "net/url"
+	"fmt"
+	"os"
 	"database/sql"
 	"encoding/json"
-	// "log"
-	// "github.com/rs/zerolog"
-	// "github.com/rs/zerolog/log"
+	"github.com/rs/zerolog"
+	"github.com/rs/zerolog/log"
 	"github.com/garyburd/redigo/redis"
 	_ "github.com/go-sql-driver/mysql"
-	// "github.com/david-pp/go2work/push/xiaomi"
+	"gopkg.in/natefinch/lumberjack.v2"
 )
 
 //
@@ -38,89 +36,120 @@ const (
 // 推送消息
 //
 type PushMessage struct {
-	Type int `json:"type"`
-	Title string `json:"title"`
+	Type    int    `json:"type"`
+	Title   string `json:"title"`
 	Content string `json:"content"`
-	Id uint32 `json:"id"`
+	Id      uint32 `json:"id"`
 }
 
 //
 // 设备信息
 //
 type DeviceInfo struct {
-	CID string
+	CID      string
 	Platform uint32
 	PushType uint32
 }
 
-
-// 推送的Redis Channel
-var push_channel string = "push"
-
-func init() {
-	
-	// debug := flag.Bool("debug", false, "sets log level to debug")
-	flag.Parse()
-
-	// log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stderr})
-
-	// zerolog.TimeFieldFormat = "2018-01-01 00:00:00"
-	// // Default level for this example is info, unless debug flag is present
-	// zerolog.SetGlobalLevel(zerolog.InfoLevel)
-	// if *debug {
-	// 	zerolog.SetGlobalLevel(zerolog.DebugLevel)
-	// }
-
-	if len(flag.Args()) > 0 {
-		push_channel = flag.Arg(0)
-	}
-
-	fmt.Println(push_channel)
-}
+//
+// 全局变量
+//
+var redisChannel string = "push"
+var redisAddress string = "127.0.0.1:6379"
+var mysqlAddress string = "david:123456@tcp(127.0.0.1)/david"
+var logFile string = ""
 
 var mysql *sql.DB
 
-func init_mysql() *sql.DB {
-    // mysql
-    db, err := sql.Open("mysql", "david:123456@tcp(127.0.0.1)/david")
+//
+// init...
+//
+func init() {
+	debug := flag.Bool("debug", false, "sets log level to debug")
+	flag.StringVar(&redisAddress, "redis", "127.0.0.1:6379", "redis address")
+	flag.StringVar(&mysqlAddress, "mysql", "david:123456@tcp(127.0.0.1)/david", "mysql address")
+	flag.StringVar(&logFile, "log", "", "specify log file")
+	flag.Parse()
+
+	if len(logFile) > 0 {
+		log.Logger = log.Output(&lumberjack.Logger{
+			Filename:   logFile,
+			MaxSize:    500,   // megabytes
+			MaxBackups: 10,    // backups
+			MaxAge:     28,    // days
+			Compress:   false, // disabled by default
+		})
+	} else {
+		log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stderr})
+	}
+
+	zerolog.TimeFieldFormat = "2018-01-01 00:00:00"
+
+	// Default level for this example is info, unless debug flag is present
+	zerolog.SetGlobalLevel(zerolog.InfoLevel)
+
+	if *debug {
+		zerolog.SetGlobalLevel(zerolog.DebugLevel)
+	}
+
+	if len(flag.Args()) > 0 {
+		redisChannel = flag.Arg(0)
+	}
+
+
+
+	log.Info().Msgf("Redis Channel: %s", redisChannel)
+	log.Info().Msgf("Redis Server: %s", redisAddress)
+	log.Info().Msgf("MySQL Server: %s", mysqlAddress)
+}
+
+func initMySql() *sql.DB {
+	db, err := sql.Open("mysql", mysqlAddress)
 	if err != nil {
-	    fmt.Println("Connect to mysql error", err)
-        return nil
+		log.Error().Msgf("Connect to mysql error: %v", err.Error())
+		return nil
 	}
 
 	err = db.Ping()
 	if err != nil {
-		fmt.Println("Connect to mysql error", err.Error())
+		log.Error().Msgf("Connect to mysql error: %v", err.Error())
 		return nil
 	}
 
 	return db
 }
 
-
 func main() {
-    redis_cli, err := redis.Dial("tcp", "127.0.0.1:6379")
-    if err != nil {
-        fmt.Println("Connect to redis error", err)
-        return
-    }
-    defer redis_cli.Close()
+	// init redis
+	redis_cli, err := redis.Dial("tcp", redisAddress)
+	if err != nil {
+		log.Error().Msgf("Connect to redis error", err.Error())
+		return
+	}
+	defer redis_cli.Close()
 
-    mysql = init_mysql()
-    defer mysql.Close()
+	// init mysql
+	mysql = initMySql()
+	if mysql == nil {
+		return
+	}
+	defer mysql.Close()
 
 	psc := redis.PubSubConn{Conn: redis_cli}
-	psc.Subscribe(push_channel)
+	psc.Subscribe(redisChannel)
 	for {
-	    switch v := psc.Receive().(type) {
-	    case redis.Message:	 
-	    	go processMessage(v.Data)
-	    case redis.Subscription:
-	        fmt.Printf("%s: %s %d\n", v.Channel, v.Kind, v.Count)
-	    case error:
-	    	fmt.Printf("Error..\n")
-	        // return v
-	    }
+		switch v := psc.Receive().(type) {
+		case redis.Message:
+			go processMessage(v.Data)
+		case redis.Subscription:
+			log.Info().
+				Str("channel", v.Channel).
+				Str("kind", v.Kind).
+				Int("count", v.Count).
+				Msgf("Redis Subscribe")
+		case error:
+			log.Error().Msgf("Redis Subscribe")
+		}
 	}
 }
 
@@ -129,56 +158,54 @@ func main() {
 //
 func processMessage(data []uint8) {
 
-	fmt.Printf("message: %s\n", data)
+	log.Debug().Msgf(string(data))
 
-   	message := &PushMessage{}
-    if err := json.Unmarshal(data, &message); err != nil {
-    	fmt.Println("json error:", err)
+	message := &PushMessage{}
+	if err := json.Unmarshal(data, &message); err != nil {
+		log.Error().Msgf("processMessage: %s", err.Error())
 	} else {
 		processPushMessage(message)
-	}	
+	}
 }
 
 //
 // 处理推送的消息
 //
 func processPushMessage(message *PushMessage) {
-	fmt.Println(*message)
 
 	sql := "SELECT CID,PLATFORM,PUSHTYPE FROM APP_DEVICE WHERE "
 	switch message.Type {
-		case MSGTYPE_PRIVATE:
-			sql += fmt.Sprintf("CHARID=%d ORDER BY UPDATETIME DESC LIMIT 1", message.Id)
-		case MSGTYPE_SEPT:
-			sql += fmt.Sprintf("SEPTID=%d LIMIT 50", message.Id)
-		case MSGTYPE_UNION:
-			sql += fmt.Sprintf("UNIONID=%d", message.Id)
+	case MSGTYPE_PRIVATE:
+		sql += fmt.Sprintf("CHARID=%d ORDER BY UPDATETIME DESC LIMIT 1", message.Id)
+	case MSGTYPE_SEPT:
+		sql += fmt.Sprintf("SEPTID=%d LIMIT 50", message.Id)
+	case MSGTYPE_UNION:
+		sql += fmt.Sprintf("UNIONID=%d", message.Id)
 	}
 
-	fmt.Println(sql)
+	log.Debug().Msgf("Mysql Query: %s", sql)
 
-    rows, err := mysql.Query(sql)
+	rows, err := mysql.Query(sql)
 	if err != nil {
-		fmt.Println("Connect to mysql error", err)
-        return
+		log.Error().Msgf("Mysql Query: %s", err.Error())
+		return
 	}
 
 	for rows.Next() {
 
-       var (
-                cid   string
-                platform uint32
-                pushtype uint32
-        )
+		var (
+			cid      string
+			platform uint32
+			pushtype uint32
+		)
 
 		err := rows.Scan(&cid, &platform, &pushtype)
-        if  err != nil {
-                fmt.Printf(err.Error())
-        } else {
-        	device := &DeviceInfo{CID: cid, Platform:platform, PushType: pushtype}
-
-        	go push2Device(device, message)
-        }
+		if err != nil {
+			fmt.Printf(err.Error())
+		} else {
+			device := &DeviceInfo{CID: cid, Platform: platform, PushType: pushtype}
+			go push2Device(device, message)
+		}
 	}
 }
 
@@ -186,19 +213,18 @@ func processPushMessage(message *PushMessage) {
 // 发送消息到相应的设备
 //
 func push2Device(device *DeviceInfo, message *PushMessage) {
-	fmt.Printf("%s %d %d\n", device.CID, device.Platform, device.PushType)	
 
-	if Platform_Andriod == device.Platform {  // Andriod
+	if Platform_Andriod == device.Platform { // Andriod
 		switch device.PushType {
-		case 3:   // 华为
-		push_to_huawei(device, message)
-		default:  // 小米(默认)
-		push_to_xiaomi(device, message)
+		case 3: // 华为
+			pushToHuaWei(device, message)
+		default: // 小米(默认)
+			pushMessageToXiaoMi(device, message)
 		}
-	} else {                   // iOS
+	} else { // iOS
 		switch device.PushType {
-		default:  // 小米(默认)
-		push_to_xiaomi(device, message)
+		default: // 小米(默认)
+			pushMessageToXiaoMi(device, message)
 		}
 	}
 }
