@@ -96,8 +96,6 @@ func init() {
 		redisChannel = flag.Arg(0)
 	}
 
-
-
 	log.Info().Msgf("Redis Channel: %s", redisChannel)
 	log.Info().Msgf("Redis Server: %s", redisAddress)
 	log.Info().Msgf("MySQL Server: %s", mysqlAddress)
