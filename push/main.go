@@ -171,19 +171,19 @@ func processMessage(data []uint8) {
 //
 func processPushMessage(message *PushMessage) {
 
-	sql := "SELECT CID,PLATFORM,PUSHTYPE FROM APP_DEVICE WHERE "
+	query := "SELECT CID,PLATFORM,PUSHTYPE FROM APP_DEVICE WHERE "
 	switch message.Type {
 	case MSGTYPE_PRIVATE:
-		sql += fmt.Sprintf("CHARID=%d ORDER BY UPDATETIME DESC LIMIT 1", message.Id)
+		query += fmt.Sprintf("CHARID=%d ORDER BY UPDATETIME DESC LIMIT 1", message.Id)
 	case MSGTYPE_SEPT:
-		sql += fmt.Sprintf("SEPTID=%d LIMIT 50", message.Id)
+		query += fmt.Sprintf("SEPTID=%d LIMIT 50", message.Id)
 	case MSGTYPE_UNION:
-		sql += fmt.Sprintf("UNIONID=%d", message.Id)
+		query += fmt.Sprintf("UNIONID=%d", message.Id)
 	}
 
-	log.Debug().Msgf("Mysql Query: %s", sql)
+	log.Debug().Msgf("Mysql Query: %s", query)
 
-	rows, err := mysql.Query(sql)
+	rows, err := mysql.Query(query)
 	if err != nil {
 		log.Error().Msgf("Mysql Query: %s", err.Error())
 		return
