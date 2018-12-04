@@ -58,6 +58,7 @@ func printServiceMetrics(service int, pid int) {
 		ret, _ := process.PidExists(int32(pid))
 		if ret == false {
 			fmt.Printf("service_crash,zone=%d,service=%d value=1\n", zoneId, service)
+			done <- 0
 			return
 		}
 	}
@@ -191,7 +192,7 @@ func main ()  {
 
 	// fmt.Println(zoneId)
 	for service, pid := range services {
-		// fmt.Println(service, pid)
+		fmt.Println(service, pid)
 		go printServiceMetrics(service, pid)
 	}
 
