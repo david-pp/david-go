@@ -44,7 +44,8 @@ func loadServiceInfo() {
 			if err == nil {
 				content, err := ioutil.ReadFile(files[i])
 				if err == nil {
-					pid, _ := strconv.Atoi(string(content))
+					pidtext := strings.TrimSpace(string(content))
+					pid, _ := strconv.Atoi(pidtext)
 					services[service_id] = pid
 				}
 			}
@@ -192,7 +193,7 @@ func main ()  {
 
 	// fmt.Println(zoneId)
 	for service, pid := range services {
-		fmt.Println(service, pid)
+		// fmt.Println(service, pid)
 		go printServiceMetrics(service, pid)
 	}
 
