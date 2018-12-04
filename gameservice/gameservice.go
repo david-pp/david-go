@@ -18,6 +18,8 @@ var services = make(map[int]int)
 
 var zoneId = 0
 
+var done = make(chan int)
+
 // 
 // service_[id] -> PID
 // 
@@ -64,6 +66,8 @@ func printServiceMetrics(service int, pid int) {
 	if err == nil {
 		printMetrics(service, *ret)
 	}
+
+	done <- 1
 }
 
 func printMetrics(service int, proc process.Process) {
@@ -181,15 +185,17 @@ func main ()  {
 		service_dir = os.Args[1]
 	}
 
-	fmt.Printf("Path:%v\n", service_dir)
+	// fmt.Printf("Path:%v\n", service_dir)
 
 	loadServiceInfo()
 
-	fmt.Println(zoneId)
+	// fmt.Println(zoneId)
 	for service, pid := range services {
-		fmt.Println(service, pid)
-		printServiceMetrics(service, pid)
+		// fmt.Println(service, pid)
+		go printServiceMetrics(service, pid)
 	}
 
-	// time.Sleep(1500 * time.Millisecond)
+	for range services {
+		<- done
+	}
 }
