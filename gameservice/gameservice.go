@@ -28,7 +28,8 @@ func loadServiceInfo() {
 	// load zone info
 	content, err := ioutil.ReadFile(service_dir + "/zone_id")
 	if err == nil {
-		zoneId, _ = strconv.Atoi(string(content))
+		text := strings.TrimSpace(string(content))
+		zoneId, _ = strconv.Atoi(text)
 	}
 
 	// load services's pid
