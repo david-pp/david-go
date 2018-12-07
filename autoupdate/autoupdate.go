@@ -14,6 +14,7 @@ import (
 	// "strings"
 )
 
+
 type (
 	File struct {
 		Name string `json:"name"`
@@ -29,12 +30,36 @@ type (
 var httpPath = "http://127.0.0.1:8000"
 var interval = flag.Int("interval", 2, "time interval")
 var once = flag.Bool("once", false, "run once")
+var daemon = flag.Bool("d", false, "run app as a daemon with -d=true or -d true.")
+var cwd = flag.String("cwd", "", "current work directory")
+
 var exename = "autoupdate"
+var exeDir  string
+var exeFileName  string
 
 func main ()  {
 	flag.Parse()
 
+	if *daemon {
+		cmd := exec.Command(os.Args[0])
+		cmd.Stdin = os.Stdin
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		cmd.Start()
+		fmt.Printf("%s [PID] %d running...\n", os.Args[0], cmd.Process.Pid)
+		*daemon = false
+		os.Exit(0)
+	}
+
 	exename = os.Args[0]
+	exeDir, exeFileName = filepath.Split(exename)
+
+	if len(*cwd) > 0 {
+		exeDir = *cwd
+	}
+
+	fmt.Println(os.Args)
+	fmt.Println("CWD:", exeDir)
 
 	if len(flag.Args()) > 0 {
 		httpPath = "http://" + flag.Arg(0)
@@ -68,6 +93,7 @@ func checkAndUpdate() {
 	// fmt.Println(remote)
 
 	var selfupdated = false
+	var newExeFile = ""
 
 	if local.Version != remote.Version {
 		fmt.Println("UPDATE: ---------------------", time.Now())
@@ -80,10 +106,14 @@ func checkAndUpdate() {
 				os.MkdirAll(dir, 0777)
 			}
 
-			_, exeFileName := filepath.Split(exename)
 			if filename == exeFileName { // UPDATE SELF
 				os.Rename(exename, exename + "." + local.Version)
 				dowloadFile(fileinfo.Name)
+
+				newExeDir := exeDir + "/" + remote.Version
+				newExeFile = newExeDir + "/" + exeFileName
+				os.MkdirAll(newExeDir, 0777)
+				CopyFile(newExeFile, fileinfo.Name)
 				selfupdated = true
 			} else {
 				dowloadFile(fileinfo.Name)
@@ -96,16 +126,17 @@ func checkAndUpdate() {
 	// RESTART 
 	if selfupdated {
 
-		cmd := exec.Command(exename)
+		cmd := exec.Command(newExeFile, "-cwd=" + exeDir)
 		cmd.Stdin = os.Stdin
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
+		cmd.Dir = exeDir
 		err := cmd.Start()
 		if err != nil {
 			fmt.Println("RESTART....", err)
 		}
 
-		os.Exit(1)
+		os.Exit(0)
 	}
 }
 
@@ -159,4 +190,21 @@ func dowloadFile(filepath string) {
 	}
 
 	io.Copy(file, res.Body)
+}
+
+
+func CopyFile(dstName, srcName string) (written int64, err error) {
+    src, err := os.Open(srcName)
+    if err != nil {
+        return
+    }
+    defer src.Close()
+
+    dst, err := os.Create(dstName)
+    if err != nil {
+        return
+    }
+    defer dst.Close()
+
+    return io.Copy(dst, src)
 }
