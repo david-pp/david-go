@@ -1,0 +1,25 @@
+{
+    "version": "1.0.4",
+    "files": [
+        {
+            "name": "autoupdate-filelist.exe",
+            "sha1": "edbbb17d6ef08f19513e7669dc1fb77cafa6874c"
+        },
+        {
+            "name": "autoupdate.exe",
+            "sha1": "43707d65238fd10f5f869288dc6797d8ee682b6e"
+        },
+        {
+            "name": "filelist.json",
+            "sha1": "6403c537b17d5ee4a25e6e05aa4aabf00c6fd254"
+        },
+        {
+            "name": "makefilelist.go",
+            "sha1": "d2c5df3b0bbcf01a4d886672a69be6f2e02c927d"
+        },
+        {
+            "name": "test/a.json",
+            "sha1": "75595b9bff209f45acbc1e59f9bb3ca594791f8a"
+        }
+    ]
+}

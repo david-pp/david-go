@@ -2,27 +2,27 @@ package main
 
 import (
 	"fmt"
+	"github.com/shirou/gopsutil/process"
+	"io/ioutil"
 	"os"
-	"time"
+	"path/filepath"
 	"strconv"
 	"strings"
-	"path/filepath"
-	"io/ioutil"
-	"github.com/shirou/gopsutil/process"
+	"time"
 )
 
 // service info path
 var service_dir = "/tmp/gameservice"
 
-var services = make(map[int]int) 
+var services = make(map[int]int)
 
 var zoneId = 0
 
 var done = make(chan int)
 
-// 
+//
 // service_[id] -> PID
-// 
+//
 func loadServiceInfo() {
 
 	// load zone info
@@ -33,12 +33,12 @@ func loadServiceInfo() {
 	}
 
 	// load services's pid
-	files, _:= filepath.Glob(service_dir + "/service_*")
+	files, _ := filepath.Glob(service_dir + "/service_*")
 
 	for i := 0; i < len(files); i++ {
 
-		_, filename := filepath.Split(files[i]) 
-		
+		_, filename := filepath.Split(files[i])
+
 		index := strings.Index(filename, "_")
 		if index > -1 {
 			service_id, err := strconv.Atoi(filename[index+1:])
@@ -50,7 +50,7 @@ func loadServiceInfo() {
 					services[service_id] = pid
 				}
 			}
-		} 
+		}
 	}
 }
 
@@ -74,15 +74,15 @@ func printServiceMetrics(service int, pid int) {
 }
 
 func printMetrics(service int, proc process.Process) {
-    var prefix string
+	var prefix string
 
 	fields := map[string]interface{}{}
 
 	numThreads, err := proc.NumThreads()
 	if err == nil {
 		fields[prefix+"num_threads"] = numThreads
-    }
-    
+	}
+
 	// fds, err := proc.NumFDs()
 	// if err == nil {
 	// 	fields[prefix+"num_fds"] = fds
@@ -117,9 +117,9 @@ func printMetrics(service int, proc process.Process) {
 	// 	fields[prefix+"cpu_time_guest_nice"] = cpu_time.GuestNice
 	// }
 
-	cpu_perc, err := proc.Percent(time.Duration(1)*time.Second)
+	cpu_perc, err := proc.Percent(time.Duration(1) * time.Second)
 	if err == nil {
-        fields[prefix+"cpu_usage"] = cpu_perc
+		fields[prefix+"cpu_usage"] = cpu_perc
 	}
 
 	mem, err := proc.MemoryInfo()
@@ -169,21 +169,21 @@ func printMetrics(service int, proc process.Process) {
 	// 			fields[prefix+name] = rlim.Used
 	// 		}
 	// 	}
-    // }
+	// }
 
 	// fmt.Println(fields)
 
-	fmt.Printf("service_cpu,zone=%d,service=%d usage=%v\n", 
-				zoneId, service, cpu_perc)
+	fmt.Printf("service_cpu,zone=%d,service=%d usage=%v\n",
+		zoneId, service, cpu_perc)
 
 	if mem != nil {
 		fmt.Printf("service_mem,zone=%d,service=%d rss=%v,vms=%v,swap=%v,data=%v,stack=%v,locked=%v\n",
-					zoneId, service, 
-					mem.RSS, mem.VMS, mem.Swap, mem.Data, mem.Stack, mem.Locked)
+			zoneId, service,
+			mem.RSS, mem.VMS, mem.Swap, mem.Data, mem.Stack, mem.Locked)
 	}
 }
 
-func main ()  {
+func main() {
 	if len(os.Args) > 1 {
 		service_dir = os.Args[1]
 	}
@@ -199,6 +199,6 @@ func main ()  {
 	}
 
 	for range services {
-		<- done
+		<-done
 	}
 }
