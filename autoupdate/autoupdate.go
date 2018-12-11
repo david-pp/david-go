@@ -11,6 +11,8 @@ import (
 	"os"
 	"os/exec"
 	"time"
+	"encoding/hex"
+	"crypto/sha1"
 	// "strings"
 )
 
@@ -25,6 +27,14 @@ type (
 		Version string `json:"version"`
 		Files []File `json:"files"`
 	}
+
+	WatcherConfig struct {
+		Fileupdated [] string `json:fileupdated`
+		Exec string `json:exec`
+	}
+	AutoupdateConfig struct {
+		Watchers []WatcherConfig `json:watchers`
+	}
 )
 
 var httpPath = "http://127.0.0.1:8000"
@@ -36,6 +46,8 @@ var cwd = flag.String("cwd", "", "current work directory")
 var exename = "autoupdate"
 var exeDir  string
 var exeFileName  string
+
+var execCmds = make (map[string] string)
 
 func main ()  {
 	flag.Parse()
@@ -61,6 +73,8 @@ func main ()  {
 	fmt.Println(os.Args)
 	fmt.Println("CWD:", exeDir)
 
+	loadConfig()
+
 	if len(flag.Args()) > 0 {
 		httpPath = "http://" + flag.Arg(0)
 	}
@@ -85,6 +99,30 @@ func main ()  {
 	}
 }
 
+func loadConfig() (AutoupdateConfig, error) {
+	var config AutoupdateConfig
+	content, err := ioutil.ReadFile("autoupdate.json")
+	if err != nil {
+		// fmt.Println(err)
+		return config, err
+	}
+
+	err = json.Unmarshal(content, &config)
+	if err != nil {
+		// fmt.Println("ERROR:", err)
+		return config, err
+	}
+
+	for _, watcher := range config.Watchers {
+		for _, file := range watcher.Fileupdated {
+			execCmds[file] = watcher.Exec
+		}
+	}
+
+	// fmt.Println(execCmds)
+	return config, nil
+}
+
 func checkAndUpdate() {
 
 	local, _ := readLocalFileList()
@@ -95,13 +133,14 @@ func checkAndUpdate() {
 	var selfupdated = false
 	var newExeFile = ""
 
+	var cmds [] string
+
 	if local.Version != remote.Version {
 		fmt.Println("UPDATE: ---------------------", time.Now())
 		for _, fileinfo := range remote.Files {
 			
 			dir, filename := filepath.Split(fileinfo.Name)
-			fmt.Println("FILE:", fileinfo.Name)
-
+		
 			if len(dir) > 0 {
 				os.MkdirAll(dir, 0777)
 			}
@@ -110,18 +149,58 @@ func checkAndUpdate() {
 				os.Rename(exename, exename + "." + local.Version)
 				dowloadFile(fileinfo.Name)
 
-				newExeDir := exeDir + "/" + remote.Version
-				newExeFile = newExeDir + "/" + exeFileName
-				os.MkdirAll(newExeDir, 0777)
-				CopyFile(newExeFile, fileinfo.Name)
-				selfupdated = true
+				if sum, _ :=sha1f(exename + "." + local.Version); sum != fileinfo.Sha1 {
+					newExeDir := exeDir + "/" + remote.Version
+					newExeFile = newExeDir + "/" + exeFileName
+					os.MkdirAll(newExeDir, 0777)
+					CopyFile(newExeFile, fileinfo.Name)
+					selfupdated = true
+
+					fmt.Println("FILE:", fileinfo.Name)
+
+				}
 			} else {
-				dowloadFile(fileinfo.Name)
+				if filename == "filelist.json" {
+					fmt.Println("FILE:", fileinfo.Name)
+
+					dowloadFile(fileinfo.Name)
+
+				} else {
+					if sum, _ :=sha1f(fileinfo.Name); sum != fileinfo.Sha1 {
+						fmt.Println("FILE:", fileinfo.Name)
+
+						dowloadFile(fileinfo.Name)
+
+						if exec, ok := execCmds[fileinfo.Name]; ok {
+							fmt.Println("FUCK..")
+							cmds = append(cmds, exec)
+						} 		
+					}
+				}
 			}
 		} 
 	} else {
 		fmt.Println("NONE: -----------------------", time.Now())
 	}
+
+	// fmt.Println(cmds)
+	// fmt.Println(execCmds)
+	// EXEC COMMANDS
+	for _, cmd := range cmds {
+		fmt.Println("EXEC:", cmd)
+
+		cmd := exec.Command(cmd)
+		cmd.Stdin = os.Stdin
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		cmd.Dir = exeDir
+		err := cmd.Start()
+		if err != nil {
+			fmt.Println("EXEC....", err)
+		}
+	}
+
+	return
 
 	// RESTART 
 	if selfupdated {
@@ -138,6 +217,7 @@ func checkAndUpdate() {
 
 		os.Exit(0)
 	}
+	
 }
 
 func readRemoteFileList() (FileList, error) {
@@ -207,4 +287,19 @@ func CopyFile(dstName, srcName string) (written int64, err error) {
     defer dst.Close()
 
     return io.Copy(dst, src)
+}
+
+func sha1f(filepath string) (string,error) {
+	file, err := os.Open(filepath)
+	if err != nil {
+		return "", err
+	}
+
+	h := sha1.New()
+	_, err = io.Copy(h, file)
+	if err != nil {
+		return "", err
+	}
+
+	return hex.EncodeToString(h.Sum(nil)), nil
 }

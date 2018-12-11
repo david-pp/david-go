@@ -12,14 +12,6 @@
         {
             "name": "filelist.json",
             "sha1": "aaa"
-        },
-        {
-            "name": "makefilelist.go",
-            "sha1": "aaa"
-        },
-        {
-            "name": "test\\a.xml",
-            "sha1": "aaa"
         }
     ]
 }
