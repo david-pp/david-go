@@ -8,7 +8,6 @@ go run *.go
 ```
 
 
-
 ```
 git clone https://github.com/golang/sys.git $GOPATH/src/golang.org/x/sys
 ```
