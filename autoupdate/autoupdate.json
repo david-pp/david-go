@@ -1,4 +1,5 @@
 {
+    "executable" : ["autoupdate.exe"]
     "watchers": [
         {
             "fileupdated" : ["test/a.json"], 

@@ -33,6 +33,7 @@ type (
 		Exec string `json:exec`
 	}
 	AutoupdateConfig struct {
+		Executable [] string `json:executable`
 		Watchers []WatcherConfig `json:watchers`
 	}
 )
@@ -48,6 +49,7 @@ var exeDir  string
 var exeFileName  string
 
 var execCmds = make (map[string] string)
+var execFiles = make (map[string] int)
 
 func main ()  {
 	flag.Parse()
@@ -119,6 +121,10 @@ func loadConfig() (AutoupdateConfig, error) {
 		}
 	}
 
+	for _, file := range config.Executable {
+		execFiles[file] = 1
+	}
+
 	// fmt.Println(execCmds)
 	return config, nil
 }
@@ -154,6 +160,7 @@ func checkAndUpdate() {
 					newExeFile = newExeDir + "/" + exeFileName
 					os.MkdirAll(newExeDir, 0777)
 					CopyFile(newExeFile, fileinfo.Name)
+					os.Chmod(newExeFile, 0777)
 					selfupdated = true
 
 					fmt.Println("FILE:", fileinfo.Name)
@@ -171,8 +178,11 @@ func checkAndUpdate() {
 
 						dowloadFile(fileinfo.Name)
 
+						if _, isExec := execCmds[fileinfo.Name]; isExec {
+							os.Chmod(fileinfo.Name, 0777)
+						}
+
 						if exec, ok := execCmds[fileinfo.Name]; ok {
-							fmt.Println("FUCK..")
 							cmds = append(cmds, exec)
 						} 		
 					}
