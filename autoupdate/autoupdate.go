@@ -154,13 +154,13 @@ func checkAndUpdate() {
 			if filename == exeFileName { // UPDATE SELF
 				os.Rename(exename, exename + "." + local.Version)
 				dowloadFile(fileinfo.Name)
+				os.Chmod(newExeFile, 0777)
 
 				if sum, _ :=sha1f(exename + "." + local.Version); sum != fileinfo.Sha1 {
 					newExeDir := exeDir + "/" + remote.Version
 					newExeFile = newExeDir + "/" + exeFileName
 					os.MkdirAll(newExeDir, 0777)
 					CopyFile(newExeFile, fileinfo.Name)
-					os.Chmod(newExeFile, 0777)
 					selfupdated = true
 
 					fmt.Println("FILE:", fileinfo.Name)
@@ -178,13 +178,14 @@ func checkAndUpdate() {
 
 						dowloadFile(fileinfo.Name)
 
-						if _, isExec := execCmds[fileinfo.Name]; isExec {
-							os.Chmod(fileinfo.Name, 0777)
-						}
 
 						if exec, ok := execCmds[fileinfo.Name]; ok {
 							cmds = append(cmds, exec)
 						} 		
+					}
+
+					if _, isExec := execFiles[fileinfo.Name]; isExec {
+						os.Chmod(fileinfo.Name, 0777)
 					}
 				}
 			}
@@ -209,8 +210,6 @@ func checkAndUpdate() {
 			fmt.Println("EXEC....", err)
 		}
 	}
-
-	return
 
 	// RESTART 
 	if selfupdated {
